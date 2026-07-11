@@ -7,6 +7,7 @@
   <!-- link rel="stylesheet" type="text/css" href="games/dpi24-06-battleship/duel.css" media="screen" / -->
   <!-- link rel="stylesheet" type="text/css" href="games/dpi24-09-connect4/connect4.css" media="screen" / -->
   <link rel="stylesheet" type="text/css" href="prod/kanban/kanban.css" media="screen" />
+  <link rel="stylesheet" type="text/css" href="prod/events/events.css" media="screen" />
   <!-- link rel="stylesheet" type="text/css" href="prod/dpi24-14-sched/scheduling.css" media="screen" / -->
   <!-- link rel="stylesheet" type="text/css" href="prod/dpi24-15-kahoot/kahoot.css" media="screen" / -->
   <script type="text/javascript" charset="UTF-8" src="util/bipf.js"></script>
@@ -25,6 +26,10 @@
   <!-- script type="text/javascript" charset="UTF-8" src="prod/dpi24-15-kahoot/jakob_kahoot_ui.js"></script -->
   <script type="text/javascript" charset="UTF-8" src="prod/kanban/board.js"></script>
   <script type="text/javascript" charset="UTF-8" src="prod/kanban/board_ui.js"></script>
+  <script type="text/javascript" charset="UTF-8" src="prod/events/pluscodes.js"></script>
+  <script type="text/javascript" charset="UTF-8" src="prod/events/events.js"></script>
+  <script type="text/javascript" charset="UTF-8" src="prod/events/events_ui.js"></script>
+  <script type="text/javascript" charset="UTF-8" src="prod/events/events_map.js"></script>
   <script type="text/javascript" charset="UTF-8" src="games/games.js"></script>
   <script type="text/javascript" charset="UTF-8" src="games/tictactoe/ttt.js"></script>
   <!-- script type="text/javascript" charset="UTF-8" src="games/dpi24-06-battleship/duel.js"></script -->
@@ -123,6 +128,10 @@
 
     <div id='lst:kanban' class='w100 coreScroll' style="display: none;"></div>
 
+    <div id='lst:events' class='w100 coreScroll' style="display: none;"></div>
+
+    <div id='div:events_map' class='w100 coreScroll' style="display: none;"></div>
+
     <div id='kanban-create-personal-board-overlay' class='qr-overlay'>
       <div style="display:flex; justify-content: center;align-items: center; flex-direction: column; gap: 20px">
         <div style="text-align: center">
@@ -162,6 +171,15 @@
       <input type="text" id="chat_name" minlength="1" maxlength="20" size="15" >&nbsp;
       <button class=passive onclick="create_chat();" style="border: 0pt; height: 40pt;"><font size=+1 color=green>&#x2714;</font> create</button>
     </div>
+
+    <div id='new_event-overlay' class='qr-overlay'>
+      New event:<br>&nbsp;<br>
+      <textarea rows="3" id="event_descr_input" placeholder="What is happening here?" style="width: calc(100% - 10px);"></textarea>
+      <div style="font-size: x-small; opacity: 0.7; margin: 6px 0;">Your current location (if enabled) is attached automatically.</div>
+      <button class=passive onclick="event_create_from_input();" style="border: 0pt; height: 40pt;"><font size=+1 color=green>&#x2714;</font> share</button>
+    </div>
+
+    <div id='event-detail-overlay' class='qr-overlay'></div>
 
     <div id="new_contact-overlay" class="qr-overlay" style="display: none; text-align: center">
       <div style='margin-bottom: 15px;'>&nbsp;<br>Scan tinySSB QR code<br>of a trustworthy person:</div>
