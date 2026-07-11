@@ -103,6 +103,43 @@ The UI shows a going-count badge in the list, the participant names plus an
 filter. The local toggle is applied optimistically; the echoed log entry
 (with the real feed seq) confirms it.
 
+## Design discussion: deletion beyond the creator, and moderation
+
+Today only the creator can delete an event. Could others — say, to remove
+spam? In a coordination-free append-only system the question needs to be
+reframed first: **nobody can force a remote device to un-see an entry.**
+Feeds replicate as-is; "deletion" is always a *local policy decision about
+which entries to honour*. What we can design is the policy. Three options,
+in increasing order of protocol involvement:
+
+1. **Local hide.** A "hide this event" action that only touches the local
+   device (a flag in the derived index, never published). Zero protocol
+   change, perfect safety (no one can hide content *for* you), but no
+   cooperation: every user hides spam individually.
+
+2. **Trusted tombstones.** Honour a `del` from author *B* for *A*'s event iff
+   *B* is trusted by the local user — plugging into tremola's existing
+   per-contact trust levels. The log stays identical everywhere; the
+   *visible* state becomes subjective, converging only among devices with the
+   same trust sets. That subjectivity is not a bug: it is the honest
+   expression of what moderation *means* without a central authority. The
+   pending-tombstone machinery already stores every del author, so this is a
+   view-layer filter (`is del-author trusted?`) — no wire change at all.
+
+3. **Delegated moderators.** The creator lists moderator feed ids in the
+   `add` entry; everyone honours tombstones from the creator *or* a listed
+   moderator. Objective again (all devices agree, given the same entries) and
+   spam of *cooperative* authors is removable — but it needs a wire-format
+   extension and does nothing against a hostile author, who simply won't
+   delegate.
+
+The deeper lesson, worth stating in a distributed-programming context: the
+**data layer converges by construction; any moderation is a locally-chosen
+projection of that shared data**. We recommend (2) as future work because it
+reuses both the trust machinery and our pending-tombstone bookkeeping, and
+because "whom do I believe" is precisely the resource a decentralized system
+actually has.
+
 ## Map view (offline Basel basemap)
 
 The WebView serves local assets only, so remote tiles (OSM/Leaflet) are not
