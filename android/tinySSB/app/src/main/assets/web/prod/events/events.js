@@ -9,17 +9,27 @@
 // persist() like every other part of the tremola state object.
 //
 // Wire schema (e.public), produced by WebAppInterface.public_event_*:
-//   add: ["EVT", "add", pluscode, description, timestamp, starts?]
-//   del: ["EVT", "del", targetEventId, timestamp]
+//   add:  ["EVT", "add", pluscode, description, timestamp, starts?]
+//   del:  ["EVT", "del", targetEventId, timestamp]
+//   rsvp: ["EVT", "rsvp", targetEventId, going, timestamp]
 // starts is the optional scheduled start of the event (seconds since epoch);
 // it was appended to the schema later, so old entries simply lack it (-> 0).
 //
 // Index entry (tremola.events[id]):
-//   { id, from, pluscode, descr, when, starts, deleted, pending_tombstone? }
+//   { id, from, pluscode, descr, when, starts, deleted, rsvps, pending_tombstone? }
 //   id     = message ref of the "add" entry (globally unique)
 //   from   = author feed id (base64 SSB id)
 //   when   = creation time, milliseconds since epoch
 //   starts = scheduled start, milliseconds since epoch (0 = not scheduled)
+//   rsvps  = { fid: {going, seq, when} } — see below
+//
+// RSVPs are the one piece of MULTI-author state on an event: everyone appends
+// rsvp entries to their own feed only. Per author, the entry with the highest
+// sequence number in that author's feed wins (a per-author last-writer-wins
+// register). Feed seqs are totally ordered per author and re-delivery carries
+// the same seq, so merging is idempotent and commutative: any two devices
+// ingesting the same entries in any order converge to the same participant
+// set. No wall-clock trust and no coordination needed.
 
 "use strict";
 
@@ -61,7 +71,9 @@ function events_new_event(e) {
             "descr": e.public[3] || "",
             "when": (e.public[4] || 0) * 1000,
             "starts": (e.public[5] || 0) * 1000, // absent in old entries -> 0
-            "deleted": deleted
+            "deleted": deleted,
+            // rsvps that arrived before the add live on the placeholder
+            "rsvps": (existing && existing.rsvps) || {}
         };
     } else if (op == "del") {
         var target = e.public[2];
@@ -74,11 +86,33 @@ function events_new_event(e) {
             // Tombstone seen before its event (or only other pending tombstones
             // so far): remember EVERY del author for when the add arrives.
             if (!ev) {
-                ev = { "id": target, "deleted": false, "pending_tombstone": true, "pending_authors": {} };
+                ev = { "id": target, "deleted": false, "pending_tombstone": true };
                 tremola.events[target] = ev;
             }
+            if (ev.pending_authors == null)
+                ev.pending_authors = {}; // placeholder may have been created by an rsvp
             ev.pending_authors[e.header.fid] = true;
         }
+    } else if (op == "rsvp") {
+        var tid = e.public[2];
+        var rev = tremola.events[tid];
+        if (!rev) {
+            // rsvp seen before its event: same placeholder pattern as
+            // tombstones — kept invisible until (and unless) the add arrives
+            rev = { "id": tid, "deleted": false, "pending_tombstone": true, "rsvps": {} };
+            tremola.events[tid] = rev;
+        }
+        if (rev.rsvps == null)
+            rev.rsvps = {}; // entries indexed before the rsvp feature existed
+        var cur = rev.rsvps[e.header.fid];
+        // per-author LWW, ordered by the author's own feed sequence number;
+        // >= makes re-delivery of the same entry a harmless no-op
+        if (cur == null || (e.header.seq || 0) >= (cur.seq || 0))
+            rev.rsvps[e.header.fid] = {
+                "going": !!e.public[3],
+                "seq": e.header.seq || 0,
+                "when": (e.public[4] || 0) * 1000
+            };
     } else {
         return;
     }
@@ -109,6 +143,37 @@ function event_add(descr, startsSec) {
     // round-trips non-ASCII text (same idiom as chat.js)
     backend("event:add " + loc + " " + btoa(unicodeStringToTypedArray(descr))
             + " " + (startsSec > 0 ? startsSec : "null"));
+}
+
+// Publish (or update) our own RSVP for an event.
+function event_rsvp(eventId, going) {
+    backend("event:rsvp " + eventId + " " + (going ? 1 : 0));
+    // optimistic local apply, like event_delete: we keep the currently known
+    // seq, so the echoed entry (with our real, higher feed seq) confirms it
+    events_ensure_store();
+    var ev = tremola.events[eventId];
+    if (ev) {
+        if (ev.rsvps == null)
+            ev.rsvps = {};
+        var cur = ev.rsvps[myId];
+        ev.rsvps[myId] = { "going": going, "seq": cur ? cur.seq : 0, "when": Date.now() };
+    }
+    events_refresh_view();
+}
+
+// fids of everyone currently going (per-author LWW already applied on ingest)
+function events_going(ev) {
+    var out = [];
+    if (ev && ev.rsvps)
+        for (var fid in ev.rsvps)
+            if (ev.rsvps[fid].going)
+                out.push(fid);
+    return out;
+}
+
+// is the local user going?
+function events_i_go(ev) {
+    return !!(ev && ev.rsvps && ev.rsvps[myId] && ev.rsvps[myId].going);
 }
 
 // Publish a tombstone for one of our own events.

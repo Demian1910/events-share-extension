@@ -39,6 +39,8 @@ function events_load_list() {
             continue;
         if (events_filter == "located" && !(x.pluscode && x.pluscode != ""))
             continue;
+        if (events_filter == "going" && !events_i_go(x))
+            continue;
         evs.push(x);
     }
 
@@ -73,6 +75,7 @@ function events_load_list() {
     html += "<option value='upcoming'" + sel("upcoming", events_filter) + ">Upcoming only</option>";
     html += "<option value='mine'" + sel("mine", events_filter) + ">Mine only</option>";
     html += "<option value='located'" + sel("located", events_filter) + ">With location</option>";
+    html += "<option value='going'" + sel("going", events_filter) + ">I'm going</option>";
     html += "</select></div>";
 
     if (evs.length == 0) {
@@ -95,6 +98,10 @@ function events_load_list() {
         if (ev.starts > 0)
             html += "<div class='event_starts'>&#x1F4C5; " + escapeHTML(events_fmt_starts(ev.starts)) +
                 (past ? " (past)" : "") + "</div>";
+        var ngo = events_going(ev).length;
+        if (ngo > 0)
+            html += "<div class='event_rsvp_badge'>&#x1F465; " + ngo + " going" +
+                (events_i_go(ev) ? " &middot; you &#x2713;" : "") + "</div>";
         html += "<div class='event_meta'>" + escapeHTML(who) + " &middot; added " + escapeHTML(when) + "</div>";
         html += "<div class='event_actions'>";
         if (ev.pluscode && ev.pluscode != "")

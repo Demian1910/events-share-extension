@@ -27,10 +27,11 @@ other device's feed  ──►  sendTinyEventToFrontend  ──►  b2f_new_even
 
 ## Wire format (BIPF list, app tag `EVT`)
 
-| op  | schema                                                 |
-|-----|--------------------------------------------------------|
-| add | `["EVT", "add", pluscode, description, tst, starts?]`  |
-| del | `["EVT", "del", eventId, tst]`                         |
+| op   | schema                                                 |
+|------|--------------------------------------------------------|
+| add  | `["EVT", "add", pluscode, description, tst, starts?]`  |
+| del  | `["EVT", "del", eventId, tst]`                         |
+| rsvp | `["EVT", "rsvp", eventId, going, tst]`                 |
 
 - `pluscode`: Open Location Code of the event position (empty string when
   geolocation is disabled or no fix is available). From the
@@ -73,6 +74,34 @@ to the same feed and no merge conflicts by construction. Deletion is a
   the same entries in any order converge to the same visibility;
 - the UI hides the local copy optimistically; the echoed tombstone from the
   log confirms it and propagates the deletion to peers.
+
+## RSVP: multi-author state without coordination
+
+Add and delete are trivially conflict-free because all state about an event
+lives in **one** feed — the creator's — and a single append-only feed is
+totally ordered. RSVPs ("I'm going") are the first piece of **multi-author**
+state: many participants contribute to one event's participant set, which is
+where distributed systems usually need coordination. We get away without any:
+
+- every participant appends `rsvp` entries to **their own** feed only — the
+  single-writer-per-feed invariant is never violated;
+- per author, the rsvp with the highest sequence number *in that author's
+  feed* wins (`tremola.events[id].rsvps[fid] = {going, seq, when}`). Feed
+  seqs are totally ordered per author, so "latest" is well-defined without
+  trusting wall clocks;
+- the merge is idempotent (re-delivery carries the same seq) and commutative
+  (a stale lower-seq rsvp can never overwrite a newer one), so any two
+  devices ingesting the same entries in any order converge to the same
+  participant set — formally, a last-writer-wins register per author, and
+  the participant set is the join of these registers;
+- an rsvp arriving before its event's `add` is parked on the same invisible
+  placeholder used by early tombstones and carried over when the `add` shows
+  up.
+
+The UI shows a going-count badge in the list, the participant names plus an
+"I'm going / tap to cancel" toggle in the detail overlay, and an "I'm going"
+filter. The local toggle is applied optimistically; the echoed log entry
+(with the real feed seq) confirms it.
 
 ## Map view (offline Basel basemap)
 
@@ -130,7 +159,10 @@ source can produce a fix — the event is then shared without a location.
   asserts (a) replaying the same entries in several shuffled delivery orders
   converges to the same visible state, (b) tombstones are honoured only from
   the event's author, (c) old-format entries (without `starts`) still index,
-  (d) sorting and all filters produce the expected list.
+  (d) rsvp merging is per-author LWW: idempotent under re-delivery and immune
+  to stale lower-seq entries, (e) sorting and all filters produce the
+  expected list, (f) the detail overlay renders participants and the rsvp
+  toggle publishes/applies correctly.
 - **Two devices**: build and install the debug APK
   (`cd android/tinySSB && ./gradlew :app:assembleDebug`, then
   `adb install -r app/build/outputs/apk/debug/app-debug.apk` on each phone).

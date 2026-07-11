@@ -8,4 +8,4 @@ JSC=/System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers
 [ -x "$JSC" ] || JSC=jsc
 
 cd "$EVDIR" || exit 1
-exec "$JSC" pluscodes.js events.js events_ui.js "$HERE/events_test.js"
+exec "$JSC" pluscodes.js events.js events_ui.js events_map.js "$HERE/events_test.js"

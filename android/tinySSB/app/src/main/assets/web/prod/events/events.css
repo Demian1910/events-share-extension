@@ -39,6 +39,26 @@
     background-color: var(--passiveCol, #d0d0d0);
 }
 
+.event_rsvp_badge {
+    margin-top: 4px;
+    font-size: 0.85em;
+    opacity: 0.85;
+}
+
+.event_rsvp_btn {
+    border: 0;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 0.85em;
+    cursor: pointer;
+    background-color: #b8d8b8;
+}
+
+.event_rsvp_btn.event_rsvp_on {
+    background-color: #8fbc8f;
+    font-weight: bold;
+}
+
 .event_del_btn {
     background-color: #e0b0b0;
 }

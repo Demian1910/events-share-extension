@@ -178,7 +178,23 @@ function events_show_detail(eventId) {
         m += "<div class='event_starts'>&#x1F4C5; " + escapeHTML(events_fmt_starts(ev.starts)) +
             (ev.starts <= Date.now() ? " (past)" : "") + "</div>";
     m += "<div class='event_meta'>" + escapeHTML(who) + " &middot; added " + escapeHTML(when) + "</div>";
+
+    // participants (per-author LWW rsvp state, merged on ingest)
+    var going = events_going(ev);
+    if (going.length > 0) {
+        var names = [];
+        for (var g = 0; g < going.length; g++)
+            names.push(going[g] == myId ? "you" :
+                (going[g] in tremola.contacts) ? tremola.contacts[going[g]].alias : id2b32(going[g]));
+        names.sort();
+        m += "<div class='event_rsvp_badge'>&#x1F465; " + going.length + " going: " +
+            escapeHTML(names.join(", ")) + "</div>";
+    }
+
     m += "<div class='event_actions' style='margin-top: 14px;'>";
+    m += events_i_go(ev)
+        ? "<button class='event_rsvp_btn event_rsvp_on' onclick='event_rsvp_toggle(\"" + ev.id + "\")'>&#x2713; Going &middot; tap to cancel</button>"
+        : "<button class='event_rsvp_btn' onclick='event_rsvp_toggle(\"" + ev.id + "\")'>I'm going</button>";
     if (ev.pluscode && ev.pluscode != "")
         m += "<button class='event_loc_btn' onclick='showGeoMenu(\"" + ev.pluscode + "\")'>&#x1F4CD; " + escapeHTML(ev.pluscode) + "</button>";
     if (ev.from == myId)
@@ -188,6 +204,16 @@ function events_show_detail(eventId) {
     document.getElementById('event-detail-overlay').style.display = 'initial';
     document.getElementById('overlay-bg').style.display = 'initial';
     overlayIsActive = true;
+}
+
+// Flip our RSVP and re-render the open detail overlay with the
+// optimistically applied state (the echoed log entry confirms it).
+function event_rsvp_toggle(eventId) {
+    var ev = tremola.events[eventId];
+    if (ev == null || ev.deleted || ev.pending_tombstone)
+        return;
+    event_rsvp(eventId, !events_i_go(ev));
+    events_show_detail(eventId);
 }
 
 // --- eof

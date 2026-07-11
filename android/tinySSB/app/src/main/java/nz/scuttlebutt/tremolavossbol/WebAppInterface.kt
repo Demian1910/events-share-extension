@@ -426,6 +426,10 @@ class WebAppInterface(val act: MainActivity, val webView: WebView) {
                 public_event_delete(args[1])
                 return
             }
+            "event:rsvp" -> { // event:rsvp eventId going(1|0)
+                public_event_rsvp(args[1], args[2] == "1")
+                return
+            }
             "iam" -> {
                 val new_alias = Base64.decode(args[1], Base64.NO_WRAP).decodeToString()
                 val lst = Bipf.mkList()
@@ -676,6 +680,24 @@ class WebAppInterface(val act: MainActivity, val webView: WebView) {
         Bipf.list_append(lst, Bipf.mkString(description))
         Bipf.list_append(lst, Bipf.mkInt((System.currentTimeMillis() / 1000).toInt()))
         Bipf.list_append(lst, Bipf.mkInt(starts))
+        val body = Bipf.encode(lst)
+        if (body != null)
+            act.tinyNode.publish_public_content(body)
+    }
+
+    // Publish (or update) our RSVP for an event on the public channel.
+    // Schema: [EVT, "rsvp", eventId, going, timestamp]
+    // Multi-author state on a single event: every participant appends RSVPs
+    // to their OWN feed only; per author, the entry with the highest feed
+    // sequence number wins (a last-writer-wins register per author), so all
+    // replicas converge on the same participant set without coordination.
+    fun public_event_rsvp(eventId: String, going: Boolean) {
+        val lst = Bipf.mkList()
+        Bipf.list_append(lst, TINYSSB_APP_EVENT)
+        Bipf.list_append(lst, Bipf.mkString("rsvp"))
+        Bipf.list_append(lst, Bipf.mkString(eventId))
+        Bipf.list_append(lst, Bipf.mkInt(if (going) 1 else 0))
+        Bipf.list_append(lst, Bipf.mkInt((System.currentTimeMillis() / 1000).toInt()))
         val body = Bipf.encode(lst)
         if (body != null)
             act.tinyNode.publish_public_content(body)
