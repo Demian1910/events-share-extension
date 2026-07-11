@@ -12,12 +12,16 @@ import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat.checkSelfPermission
 import androidx.annotation.RequiresPermission
 import com.google.zxing.integration.android.IntentIntegrator
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.tasks.CancellationTokenSource
-import com.google.android.gms.tasks.Tasks
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.os.Bundle
+import android.os.Looper
+import java.util.concurrent.CountDownLatch
 
 import org.json.JSONArray
 import org.json.JSONObject
@@ -38,6 +42,7 @@ import nz.scuttlebutt.tremolavossbol.utils.Bipf_e
 import nz.scuttlebutt.tremolavossbol.utils.Constants.Companion.TINYSSB_APP_ACK
 import nz.scuttlebutt.tremolavossbol.utils.Constants.Companion.TINYSSB_APP_DELETED
 import nz.scuttlebutt.tremolavossbol.utils.Constants.Companion.TINYSSB_APP_DLV
+import nz.scuttlebutt.tremolavossbol.utils.Constants.Companion.TINYSSB_APP_EVENT
 import nz.scuttlebutt.tremolavossbol.utils.Constants.Companion.TINYSSB_APP_NEWTRUSTED
 import nz.scuttlebutt.tremolavossbol.utils.Constants.Companion.TINYSSB_APP_TICTACTOE
 import okio.ByteString.Companion.decodeHex
@@ -48,33 +53,119 @@ import java.io.File
 
 class WebAppInterface(val act: MainActivity, val webView: WebView) {
 
+    companion object {
+        const val LOCATION_PERMISSION_REQUEST = 556
+    }
+
     val frontend_frontier = act.getSharedPreferences("frontend_frontier", Context.MODE_PRIVATE)
 
+    private fun hasLocationPermission(): Boolean {
+        return checkSelfPermission(act, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+               checkSelfPermission(act, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
+
     /**
-     * Retrieves the current geolocation of the Android device and returns it as a PlusCode.
+     * Returns the current position as a PlusCode, or "" if none could be obtained
+     * (the caller then shares without a location).
+     *
+     * Uses the Android framework LocationManager (not Play Services' fused provider,
+     * which is absent on de-Googled phones). It (1) takes the best usable cached fix,
+     * chosen by ACCURACY not just recency so a coarse network fix cannot place the
+     * event kilometres away, and (2) if there is none, listens on GPS and NETWORK
+     * together for a short window and keeps the most accurate fix.
+     *
+     * GPS needs a view of the sky and no internet; network location and A-GPS need
+     * internet. Indoors without internet, no source can produce a fix.
      */
     @JavascriptInterface
     @RequiresPermission(
         anyOf = [Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION],
     )
     fun getCurrentLocationAsPlusCode(): String {
-        val locationClient = LocationServices.getFusedLocationProviderClient(act)
-
-        try {
-            val currentLocationTask = locationClient.getCurrentLocation(102, CancellationTokenSource().token)
-            val currentLocation = Tasks.await(currentLocationTask, 2, TimeUnit.SECONDS)
-            return PlusCodesUtils.encode(currentLocation.latitude, currentLocation.longitude)
-        } catch (e: Exception) {
-            val lastLocationTast = locationClient.lastLocation
-            try {
-                val lastLocation = Tasks.await(lastLocationTast, 2, TimeUnit.SECONDS)
-                return PlusCodesUtils.encode(lastLocation.latitude, lastLocation.longitude)
-            } catch (e: Exception) {
-                Toast.makeText(act, "Failed to get location. Location is not sent with this message.", Toast.LENGTH_LONG).show()
-                return ""
+        if (!hasLocationPermission()) {
+            act.runOnUiThread {
+                ActivityCompat.requestPermissions(
+                    act,
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                    LOCATION_PERMISSION_REQUEST
+                )
+                Toast.makeText(act, "Location permission is needed to attach your position. Please grant it and try again.", Toast.LENGTH_LONG).show()
             }
+            return ""
         }
 
+        val lm = act.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val now = System.currentTimeMillis()
+
+        // 1) Best usable cached fix, chosen by accuracy (a GPS fix up to 10 min old,
+        //    a non-GPS fix only if < 90 s old, both only if accuracy <= 200 m).
+        var best: Location? = null
+        try {
+            for (p in lm.getProviders(true)) {
+                val loc = try { lm.getLastKnownLocation(p) } catch (e: SecurityException) { null } ?: continue
+                val isGps = loc.provider == LocationManager.GPS_PROVIDER
+                val maxAge = if (isGps) 10 * 60 * 1000L else 90 * 1000L
+                if (now - loc.time > maxAge) continue
+                if (loc.hasAccuracy() && loc.accuracy > 200f) continue
+                if (best == null || (loc.hasAccuracy() && (!best!!.hasAccuracy() || loc.accuracy < best!!.accuracy)))
+                    best = loc
+            }
+        } catch (e: Exception) { /* fall through */ }
+        if (best != null)
+            return PlusCodesUtils.encode(best!!.latitude, best!!.longitude)
+
+        // 2) No cached fix: listen on GPS and NETWORK together, keep the most
+        //    accurate fix, run up to 18 s and stop early once accuracy is good.
+        val gpsOn = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        val netOn = lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        if (!gpsOn && !netOn) {
+            act.runOnUiThread {
+                Toast.makeText(act, "Turn on device Location to attach your position. Sending without location.", Toast.LENGTH_LONG).show()
+            }
+            return ""
+        }
+
+        val latch = CountDownLatch(1)
+        val holder = arrayOfNulls<Location>(1)
+        val listener = object : LocationListener {
+            override fun onLocationChanged(loc: Location) {
+                val prev = holder[0]
+                if (prev == null || (loc.hasAccuracy() && (!prev.hasAccuracy() || loc.accuracy < prev.accuracy)))
+                    holder[0] = loc
+                val b = holder[0]
+                if (b != null && b.hasAccuracy() && b.accuracy <= 50f)
+                    latch.countDown()
+            }
+            override fun onStatusChanged(p: String?, status: Int, extras: Bundle?) {}
+            override fun onProviderEnabled(p: String) {}
+            override fun onProviderDisabled(p: String) {}
+        }
+        act.runOnUiThread {
+            try {
+                if (gpsOn) lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0L, 0f, listener, Looper.getMainLooper())
+                if (netOn) lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0L, 0f, listener, Looper.getMainLooper())
+            } catch (e: Exception) { latch.countDown() }
+        }
+        try { latch.await(18, TimeUnit.SECONDS) } catch (e: InterruptedException) {}
+        act.runOnUiThread { try { lm.removeUpdates(listener) } catch (e: Exception) {} }
+
+        val fresh = holder[0]
+        if (fresh != null) {
+            val a = if (fresh.hasAccuracy()) fresh.accuracy else -1f
+            if (a < 0f || a > 300f) {
+                act.runOnUiThread {
+                    val m = if (a < 0f) "Approximate location attached. For a precise fix, go outdoors so GPS can lock."
+                            else "Approximate location (~${a.toInt()} m) attached. For a precise fix, go outdoors so GPS can lock."
+                    Toast.makeText(act, m, Toast.LENGTH_LONG).show()
+                }
+            }
+            return PlusCodesUtils.encode(fresh.latitude, fresh.longitude)
+        }
+
+        act.runOnUiThread {
+            Toast.makeText(act, "No location fix. Indoors, connect to Wi-Fi/mobile data (needed for network location and A-GPS); otherwise go outdoors so GPS can lock. Sent without location.", Toast.LENGTH_LONG).show()
+        }
+        return ""
     }
 
     @JavascriptInterface
@@ -322,6 +413,17 @@ class WebAppInterface(val act: MainActivity, val webView: WebView) {
 
                 kanban(bid, prev , op, argsList)
             }
+            "event:add" -> { // event:add b64(pluscode)|null b64(description)
+                val pluscode = if (args[1] != "null")
+                    Base64.decode(args[1], Base64.NO_WRAP).decodeToString() else ""
+                val descr = Base64.decode(args[2], Base64.NO_WRAP).decodeToString()
+                public_event_add(pluscode, descr)
+                return
+            }
+            "event:delete" -> { // event:delete eventId (base64 msg ref of the target event)
+                public_event_delete(args[1])
+                return
+            }
             "iam" -> {
                 val new_alias = Base64.decode(args[1], Base64.NO_WRAP).decodeToString()
                 val lst = Bipf.mkList()
@@ -554,6 +656,36 @@ class WebAppInterface(val act: MainActivity, val webView: WebView) {
         val tst = Bipf.mkInt((System.currentTimeMillis() / 1000).toInt())
         // Log.d("wai", "send time is ${tst.getInt()}")
         Bipf.list_append(lst, tst)
+        val body = Bipf.encode(lst)
+        if (body != null)
+            act.tinyNode.publish_public_content(body)
+    }
+
+    // Publish a georeferenced event on the public channel.
+    // Schema: [EVT, "add", pluscode, description, timestamp]
+    // The message id (mid) assigned by the log becomes the event id, used by delete.
+    fun public_event_add(pluscode: String, description: String) {
+        val lst = Bipf.mkList()
+        Bipf.list_append(lst, TINYSSB_APP_EVENT)
+        Bipf.list_append(lst, Bipf.mkString("add"))
+        Bipf.list_append(lst, Bipf.mkString(pluscode))
+        Bipf.list_append(lst, Bipf.mkString(description))
+        Bipf.list_append(lst, Bipf.mkInt((System.currentTimeMillis() / 1000).toInt()))
+        val body = Bipf.encode(lst)
+        if (body != null)
+            act.tinyNode.publish_public_content(body)
+    }
+
+    // Publish a tombstone that hides a previously created event.
+    // Schema: [EVT, "del", eventId, timestamp]
+    // Append-only per author: honoured by the frontend only if the tombstone
+    // author matches the author of the referenced event.
+    fun public_event_delete(eventId: String) {
+        val lst = Bipf.mkList()
+        Bipf.list_append(lst, TINYSSB_APP_EVENT)
+        Bipf.list_append(lst, Bipf.mkString("del"))
+        Bipf.list_append(lst, Bipf.mkString(eventId))
+        Bipf.list_append(lst, Bipf.mkInt((System.currentTimeMillis() / 1000).toInt()))
         val body = Bipf.encode(lst)
         if (body != null)
             act.tinyNode.publish_public_content(body)
