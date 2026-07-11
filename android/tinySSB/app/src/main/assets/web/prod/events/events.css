@@ -1,0 +1,188 @@
+/* prod/events/events.css */
+
+.event_item {
+    margin: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+}
+
+.event_descr {
+    font-size: 1.05em;
+    font-weight: bold;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.event_meta {
+    margin-top: 4px;
+    font-size: 0.8em;
+    opacity: 0.7;
+}
+
+.event_actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.event_loc_btn,
+.event_del_btn {
+    border: 0;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 0.85em;
+    cursor: pointer;
+}
+
+.event_loc_btn {
+    background-color: var(--passiveCol, #d0d0d0);
+}
+
+.event_del_btn {
+    background-color: #e0b0b0;
+}
+
+.event_empty {
+    text-align: center;
+    margin-top: 2em;
+    opacity: 0.6;
+}
+
+/* toolbar shared by list and map view */
+
+.event_toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 8px;
+}
+
+.event_toolbar_btn {
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    background-color: var(--passiveCol, #d0d0d0);
+    font-size: 0.9em;
+    cursor: pointer;
+}
+
+.event_toolbar_info {
+    font-size: 0.8em;
+    opacity: 0.7;
+}
+
+/* map view */
+
+/* square wrapper: padding-bottom trick keeps a 1:1 box on any WebView */
+.events_map_wrap {
+    position: relative;
+    width: calc(100% - 16px);
+    height: 0;
+    padding-bottom: calc(100% - 16px);
+    margin: 0 8px;
+}
+
+.events_map_svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+}
+
+.events_map_frame {
+    fill: #cdd7de;
+}
+
+.basel_land {
+    fill: #eef1e8;
+    stroke: #b7c2b0;
+    stroke-width: 2;
+}
+
+.basel_rhine {
+    fill: none;
+    stroke: #6fa8d6;
+    stroke-width: 16;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.9;
+}
+
+.basel_watermark {
+    font-size: 78px;
+    font-weight: bold;
+    fill: #c7cfc0;
+    letter-spacing: 8px;
+}
+
+.basel_label {
+    font-size: 32px;
+    fill: #5a6b52;
+    font-style: italic;
+}
+
+.basel_compass line {
+    stroke: #55605a;
+    stroke-width: 5;
+}
+
+.basel_compass path {
+    fill: #55605a;
+}
+
+.basel_compass_txt {
+    font-size: 34px;
+    font-weight: bold;
+    fill: #55605a;
+}
+
+.event_map_legend_out {
+    opacity: 0.7;
+    font-size: 0.92em;
+}
+
+.events_map_scale {
+    stroke: #444444;
+    stroke-width: 6;
+}
+
+.events_map_scale_txt {
+    font-size: 34px;
+    fill: #444444;
+}
+
+.events_map_pin {
+    cursor: pointer;
+}
+
+.events_map_pin_txt {
+    font-size: 28px;
+    font-weight: bold;
+    fill: #ffffff;
+    pointer-events: none;
+}
+
+.event_map_legend {
+    margin: 8px;
+}
+
+.event_map_legend_row {
+    padding: 6px 4px;
+    cursor: pointer;
+}
+
+.event_map_legend_dot {
+    display: inline-block;
+    width: 1.7em;
+    height: 1.7em;
+    line-height: 1.7em;
+    border-radius: 50%;
+    color: #ffffff;
+    text-align: center;
+    font-size: 0.85em;
+    font-weight: bold;
+}

@@ -370,6 +370,7 @@ function resetTremola() { // wipes browser-side content
         "id": myId,
         "settings": {},
         "board": {},
+        "events": {},
     }
 
     var n = recps2nm([myId])
@@ -617,6 +618,8 @@ function b2f_new_event(e) { // incoming SSB log event: we get map with three ent
             }
         } else if (e.public[0] == "TTT")
             ttt_on_rx(e.header.ref, e.header.fid, e.public.slice(1))
+        else if (e.public[0] == "EVT")
+            events_new_event(e)
 
         persist();
         must_redraw = true;

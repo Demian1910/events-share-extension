@@ -6,3 +6,7 @@
 *~
 
 local.properties
+
+# local dev/deploy scripts (machine-specific, not part of the app)
+dev.sh
+push_assets.sh

@@ -9,7 +9,7 @@ var display_or_not = [
     'lst:chats', 'lst:prod', 'lst:games', 'lst:contacts', 'lst:members',
     'div:posts', 'lst:kanban', 'div:board',
     'div:footer', 'div:textarea', 'div:confirm-members', 'div:settings',
-    'div:tictactoe_list', 'div:tictactoe_board'
+    'div:tictactoe_list', 'div:tictactoe_board', 'lst:events', 'div:events_map'
 ];
 
 var prev_scenario = 'chats';
@@ -26,6 +26,8 @@ var scenarioDisplay = {
     'settings': ['div:back', 'core', 'div:settings'],
     'kanban': ['div:back', 'core', 'lst:kanban', 'plus'], // KANBAN
     'board': ['div:back', 'core', 'div:board'], // KANBAN
+    'events': ['div:back', 'core', 'lst:events', 'plus'], // EVENTS
+    'events-map': ['div:back', 'core', 'div:events_map', 'plus'], // EVENTS
     'tictactoe-list': ['div:back', 'core', 'div:tictactoe_list', 'plus'],
     'tictactoe-board': ['div:back', 'core', 'div:tictactoe_board'],
 }
@@ -78,6 +80,15 @@ var scenarioMenu = {
     'tictactoe-board': [
         ['Settings', 'menu_settings'],
         ['About', 'menu_about']],
+
+    'events': [
+        ['Map view', 'events_show_map'],
+        ['Settings', 'menu_settings'],
+        ['About', 'menu_about']],
+    'events-map': [
+        ['List view', 'events_show_list'],
+        ['Settings', 'menu_settings'],
+        ['About', 'menu_about']],
 }
 
 const QR_SCAN_TARGET = {
@@ -107,10 +118,12 @@ function onBackPressed() {
         setScenario(prev_scenario)
     else if (['productivity', 'games', 'contacts'].indexOf(curr_scenario) >= 0)
         setScenario('chats')
-    else if (['kanban'].indexOf(curr_scenario) >= 0) {
+    else if (['kanban', 'events'].indexOf(curr_scenario) >= 0) {
         setScenario('productivity')
         prev_scenario = 'chats'
-    } else if (curr_scenario == 'posts')
+    } else if (curr_scenario == 'events-map')
+        setScenario('events')
+    else if (curr_scenario == 'posts')
         setScenario('chats')
     else if (curr_scenario == 'board')
         setScenario('kanban')
@@ -226,6 +239,22 @@ function setScenario(s) {
             c.innerHTML = "<font size=+1><strong>Tic Tac Toe</strong></font><br>Pick or create a new game";
             ttt_load_list();
         }
+
+        if (s == 'events') {
+            document.getElementById("tremolaTitle").style.display = 'none';
+            var c = document.getElementById("conversationTitle");
+            c.style.display = null;
+            c.innerHTML = "<font size=+1><strong>Share Events</strong></font><br>Shared georeferenced events";
+            events_load_list();
+        }
+
+        if (s == 'events-map') {
+            document.getElementById("tremolaTitle").style.display = 'none';
+            var c = document.getElementById("conversationTitle");
+            c.style.display = null;
+            c.innerHTML = "<font size=+1><strong>Share Events</strong></font><br>Map view";
+            events_render_map();
+        }
         if (s == 'tictactoe-board') {
             document.getElementById("tremolaTitle").style.display = 'none';
             var c = document.getElementById("conversationTitle");
@@ -295,6 +324,8 @@ function closeOverlay() {
     document.getElementById('preview-overlay').style.display = 'none';
     document.getElementById('image-overlay').style.display = 'none';
     document.getElementById('new_chat-overlay').style.display = 'none';
+    document.getElementById('new_event-overlay').style.display = 'none';
+    document.getElementById('event-detail-overlay').style.display = 'none';
     document.getElementById('new_contact-overlay').style.display = 'none';
     document.getElementById('confirm_contact-overlay').style.display = 'none';
     document.getElementById('overlay-bg').style.display = 'none';
@@ -365,6 +396,8 @@ function plus_button() {
         menu_new_board();
     } else if (curr_scenario == 'tictactoe-list') {
         ttt_new_game();
+    } else if (curr_scenario == 'events' || curr_scenario == 'events-map') {
+        menu_new_event();
     }
 }
 

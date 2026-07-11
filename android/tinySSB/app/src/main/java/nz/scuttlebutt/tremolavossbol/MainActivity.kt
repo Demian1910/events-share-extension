@@ -11,7 +11,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.Manifest
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.net.NetworkInfo
 import android.net.Uri
 import android.net.wifi.WifiManager
@@ -26,6 +28,8 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat.checkSelfPermission
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -116,6 +120,19 @@ class MainActivity : Activity() {
 
         settings = Settings(this)
         idStore = IdStore(this)
+
+        // The geo-tagging feature (attaching a plus code to events/messages) needs the
+        // location runtime permission. Request it proactively at startup when location
+        // sharing is enabled, so it does not depend on the BLE setup path.
+        if (settings!!.isGeoLocationEnabled() &&
+            checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                WebAppInterface.LOCATION_PERMISSION_REQUEST
+            )
+        }
 
         // wifiManager = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
         // mlock = wifiManager?.createMulticastLock("lock")
