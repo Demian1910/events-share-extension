@@ -210,4 +210,11 @@ assert(backendCalls[backendCalls.length - 1].indexOf("b64(" + pickedCode + ")") 
     "picked plus code published instead of the device position");
 assert(events_pick_code === "", "pick state cleared after publishing");
 
+// 11) enriched basemap renders in normal (non-pick) mode
+events_render_map();
+html = elements["div:events_map"].innerHTML;
+assert(pos("basel_bridge") >= 0 && pos("basel_river_minor") >= 0, "bridges and tributaries drawn");
+assert(pos("Bahnhof SBB") >= 0 && pos("Messe") >= 0, "orientation points labelled");
+assert(pos("List view") >= 0, "normal toolbar restored after picking ended");
+
 print(fails === 0 ? "ALL TESTS PASSED" : fails + " FAILURE(S)");

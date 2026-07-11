@@ -15,16 +15,51 @@
 // Fixed geographic frame of the preinstalled basemap (the city of Basel).
 var BASEL_BBOX = { "minLat": 47.530, "maxLat": 47.600, "minLng": 7.550, "maxLng": 7.640 };
 
-// Approximate real course of the Rhine through Basel (lat, lng), south-east
-// entry -> Mittlere Bruecke -> Rhine knee -> north exit toward Kleinhueningen.
+// Approximate real course of the Rhine through Basel (lat, lng): enters at
+// the east frame edge (Birsfelden), Mittlere Bruecke, the Rhine knee, and
+// exits at the top edge past Kleinhueningen.
 var BASEL_RHINE = [
-    [47.5470, 7.6150], [47.5520, 7.6020], [47.5580, 7.5920], [47.5605, 7.5885],
-    [47.5640, 7.5850], [47.5690, 7.5840], [47.5760, 7.5870], [47.5850, 7.5920]
+    [47.5430, 7.6400], [47.5470, 7.6150], [47.5520, 7.6020], [47.5580, 7.5920],
+    [47.5605, 7.5885], [47.5640, 7.5850], [47.5690, 7.5840], [47.5760, 7.5870],
+    [47.5850, 7.5920], [47.6000, 7.5930]
 ];
 
 var BASEL_LABELS = [
     { "lat": 47.5535, "lng": 7.5790, "text": "Grossbasel" },
-    { "lat": 47.5690, "lng": 7.6010, "text": "Kleinbasel" }
+    { "lat": 47.5690, "lng": 7.6010, "text": "Kleinbasel" },
+    { "lat": 47.5665, "lng": 7.5750, "text": "St. Johann" },
+    { "lat": 47.5420, "lng": 7.5900, "text": "Gundeldingen" }
+];
+
+// The two tributaries reaching the Rhine inside the frame (schematic).
+var BASEL_WIESE = [
+    [47.6000, 7.6310], [47.5940, 7.6150], [47.5900, 7.6060],
+    [47.5880, 7.5985], [47.5865, 7.5924]
+];
+var BASEL_BIRS = [
+    [47.5300, 7.6230], [47.5390, 7.6190], [47.5460, 7.6140], [47.5496, 7.6082]
+];
+var BASEL_RIVER_LABELS = [
+    { "lat": 47.5915, "lng": 7.6100, "text": "Wiese" },
+    { "lat": 47.5395, "lng": 7.6215, "text": "Birs" }
+];
+
+// The five major Rhine bridges, SE to NW, as bank-to-bank segments.
+var BASEL_BRIDGES = [
+    [[47.5515, 7.6001], [47.5535, 7.6019]],  // Schwarzwaldbruecke
+    [[47.5554, 7.5933], [47.5570, 7.5955]],  // Wettsteinbruecke
+    [[47.5598, 7.5871], [47.5612, 7.5899]],  // Mittlere Bruecke
+    [[47.5640, 7.5834], [47.5644, 7.5864]],  // Johanniterbruecke
+    [[47.5716, 7.5838], [47.5724, 7.5868]]   // Dreirosenbruecke
+];
+
+// A few well-known orientation points.
+var BASEL_POIS = [
+    { "lat": 47.5560, "lng": 7.5905, "text": "M&#252;nster", "anchor": "end" },
+    { "lat": 47.5476, "lng": 7.5896, "text": "Bahnhof SBB" },
+    { "lat": 47.5673, "lng": 7.6072, "text": "Bad. Bahnhof" },
+    { "lat": 47.5637, "lng": 7.6003, "text": "Messe" },
+    { "lat": 47.5474, "lng": 7.5786, "text": "Zoo" }
 ];
 
 function events_show_map() {
@@ -178,17 +213,44 @@ function events_render_map() {
     // land area of the basemap
     svg += "<rect x='" + offX + "' y='" + offY + "' width='" + (gw * scale) + "' height='" + (gh * scale) + "' class='basel_land'/>";
 
-    // the Rhine
-    var d = "";
-    for (i = 0; i < BASEL_RHINE.length; i++)
-        d += (i === 0 ? "M" : "L") + px(BASEL_RHINE[i][1]).toFixed(1) + "," + py(BASEL_RHINE[i][0]).toFixed(1) + " ";
-    svg += "<path d='" + d + "' class='basel_rhine'/>";
+    // rivers: tributaries first (thinner), then the Rhine on top
+    var path = function (pts) {
+        var d = "";
+        for (var n = 0; n < pts.length; n++)
+            d += (n === 0 ? "M" : "L") + px(pts[n][1]).toFixed(1) + "," + py(pts[n][0]).toFixed(1) + " ";
+        return d;
+    };
+    svg += "<path d='" + path(BASEL_WIESE) + "' class='basel_river_minor'/>";
+    svg += "<path d='" + path(BASEL_BIRS) + "' class='basel_river_minor'/>";
+    svg += "<path d='" + path(BASEL_RHINE) + "' class='basel_rhine'/>";
 
-    // watermark + district labels
+    // bridges across the Rhine
+    for (i = 0; i < BASEL_BRIDGES.length; i++) {
+        var br = BASEL_BRIDGES[i];
+        svg += "<line x1='" + px(br[0][1]).toFixed(1) + "' y1='" + py(br[0][0]).toFixed(1) +
+            "' x2='" + px(br[1][1]).toFixed(1) + "' y2='" + py(br[1][0]).toFixed(1) + "' class='basel_bridge'/>";
+    }
+
+    // watermark + district and river labels
     svg += "<text x='" + (W / 2) + "' y='" + (offY + 70) + "' text-anchor='middle' class='basel_watermark'>BASEL</text>";
     for (i = 0; i < BASEL_LABELS.length; i++) {
         var L = BASEL_LABELS[i];
         svg += "<text x='" + px(L.lng).toFixed(1) + "' y='" + py(L.lat).toFixed(1) + "' text-anchor='middle' class='basel_label'>" + L.text + "</text>";
+    }
+    for (i = 0; i < BASEL_RIVER_LABELS.length; i++) {
+        var RL = BASEL_RIVER_LABELS[i];
+        svg += "<text x='" + px(RL.lng).toFixed(1) + "' y='" + py(RL.lat).toFixed(1) + "' text-anchor='middle' class='basel_river_label'>" + RL.text + "</text>";
+    }
+
+    // orientation points (dot + name; anchor 'end' puts the label on the
+    // left, e.g. for the Muenster whose right side is the river)
+    for (i = 0; i < BASEL_POIS.length; i++) {
+        var P = BASEL_POIS[i];
+        var pxx = px(P.lng), pyy = py(P.lat);
+        var flip = P.anchor == "end";
+        svg += "<circle cx='" + pxx.toFixed(1) + "' cy='" + pyy.toFixed(1) + "' r='7' class='basel_poi'/>";
+        svg += "<text x='" + (pxx + (flip ? -14 : 14)).toFixed(1) + "' y='" + (pyy + 8).toFixed(1) +
+            (flip ? "' text-anchor='end" : "") + "' class='basel_poi_txt'>" + P.text + "</text>";
     }
 
     // north arrow (top-right)
