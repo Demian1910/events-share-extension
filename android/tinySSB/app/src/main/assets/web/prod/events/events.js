@@ -130,10 +130,12 @@ function events_refresh_view() {
 
 // Publish a new event. Best-effort geolocation, mirroring prod/chat.js.
 // startsSec: optional scheduled start (seconds since epoch, 0 = unscheduled).
-function event_add(descr, startsSec) {
-    var pluscode = "";
+// pluscodeOverride: location picked on the map; falls back to the device
+// position when empty.
+function event_add(descr, startsSec, pluscodeOverride) {
+    var pluscode = pluscodeOverride || "";
     try {
-        if (typeof Android != 'undefined' && Android.isGeoLocationEnabled() == "true")
+        if (pluscode == "" && typeof Android != 'undefined' && Android.isGeoLocationEnabled() == "true")
             pluscode = Android.getCurrentLocationAsPlusCode();
     } catch (err) {
         pluscode = "";

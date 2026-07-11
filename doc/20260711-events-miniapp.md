@@ -119,6 +119,13 @@ match a tappable legend; events outside the frame or without a location stay
 reachable in the legend and list. Pins and legend rows open a detail overlay
 shared with the list view.
 
+The map doubles as a **location picker**: from the new-event form, "Pick on
+map" switches the map into pick mode — a tap is run through the inverse of
+the pin projection (`events_map_xy2geo`) and encoded with `olc_encode`, the
+integer-arithmetic inverse of the decoder, so a picked position and a GPS
+position travel through exactly the same wire format. This also covers the
+indoors-without-internet case where no geolocation source can produce a fix.
+
 Untrusted input is handled defensively: a `pluscode` that does not decode as a
 valid Open Location Code is dropped at ingest (it can only contain the OLC
 alphabet, so it cannot break out of the inline `onclick` attributes the views
@@ -134,7 +141,8 @@ location runtime permission is requested proactively at startup.
 
 Practical note: **GPS needs a view of the sky and no internet; network
 location and A-GPS assistance need internet**. Indoors without internet, no
-source can produce a fix — the event is then shared without a location.
+source can produce a fix — the event is then shared without a location, or
+the position can be chosen manually on the map (see above).
 
 ## Files
 
@@ -146,7 +154,7 @@ source can produce a fix — the event is then shared without a location.
 | `web/prod/events/events.js` | EVT dispatch, index, add/delete logic |
 | `web/prod/events/events_ui.js` | list view, add overlay, delete confirm |
 | `web/prod/events/events_map.js` | Basel map view, detail overlay |
-| `web/prod/events/pluscodes.js` | OLC decoder (JS port) |
+| `web/prod/events/pluscodes.js` | OLC decoder (JS port) + matching encoder |
 | `web/prod/events/events.css` | styling |
 | `web/prod/events/events.svg` | launcher icon |
 | `web/tremola.js` / `tremola_ui.js` / `tremola.html` / `prod/tools.js` | dispatch + scenario wiring + launcher |
@@ -162,7 +170,9 @@ source can produce a fix — the event is then shared without a location.
   (d) rsvp merging is per-author LWW: idempotent under re-delivery and immune
   to stale lower-seq entries, (e) sorting and all filters produce the
   expected list, (f) the detail overlay renders participants and the rsvp
-  toggle publishes/applies correctly.
+  toggle publishes/applies correctly, (g) the plus-code encoder round-trips
+  against the decoder over a global grid, and the picker flow (inverse
+  projection, in-frame guard, draft restore, publish) behaves.
 - **Two devices**: build and install the debug APK
   (`cd android/tinySSB && ./gradlew :app:assembleDebug`, then
   `adb install -r app/build/outputs/apk/debug/app-debug.apk` on each phone).

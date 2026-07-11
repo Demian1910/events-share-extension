@@ -48,4 +48,35 @@ function olc_decode(code) {
     };
 }
 
+// Encode a position as a 10-digit plus code (e.g. "8FV9HH6Q+6C", ~14m cell),
+// the exact integer-arithmetic inverse of olc_decode above: encoding any
+// point inside a cell returns that cell's code, so encode/decode round-trip.
+// Used by the map view's location picker.
+function olc_encode(lat, lng) {
+    lat = Math.min(90, Math.max(-90, lat));
+    while (lng < -180) lng += 360;
+    while (lng >= 180) lng -= 360;
+    // +1e-3 integer units (= 4e-11 degrees, spatially irrelevant) guards
+    // against floating-point error flipping a position that lies exactly on
+    // a cell boundary (e.g. re-encoding a decoded SW corner) into the
+    // neighbouring cell
+    var latVal = Math.floor((lat + 90) * OLC_LAT_MULT + 1e-3);
+    var lngVal = Math.floor((lng + 180) * OLC_LNG_MULT + 1e-3);
+    if (latVal >= 180 * OLC_LAT_MULT)     // lat == 90: stay in the last cell
+        latVal = 180 * OLC_LAT_MULT - 1;
+
+    var code = "";
+    var latPlace = OLC_LAT_MSP;
+    var lngPlace = OLC_LNG_MSP;
+    for (var i = 0; i < 5; i++) {         // 5 digit pairs = 10 digits
+        latPlace /= OLC_BASE;
+        lngPlace /= OLC_BASE;
+        code += OLC_ALPHABET[Math.floor(latVal / latPlace) % OLC_BASE];
+        code += OLC_ALPHABET[Math.floor(lngVal / lngPlace) % OLC_BASE];
+        if (i == 3)
+            code += "+";
+    }
+    return code;
+}
+
 // --- eof

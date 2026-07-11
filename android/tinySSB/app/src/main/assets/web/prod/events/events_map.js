@@ -28,11 +28,61 @@ var BASEL_LABELS = [
 ];
 
 function events_show_map() {
+    events_pick_mode = false; // entering as a viewer, not from the add form
     setScenario('events-map');
 }
 
 function events_show_list() {
     setScenario('events');
+}
+
+// --- location picking (from the new-event overlay) --------------------------
+
+var events_pick_mode = false;
+
+// The overlay's "Pick on map" button: park the form drafts, switch to the
+// map and wait for a tap.
+function events_pick_start() {
+    events_draft_descr = document.getElementById('event_descr_input').value;
+    events_draft_time = document.getElementById('event_time_input').value;
+    events_pick_code = "";
+    events_pick_mode = true;
+    closeOverlay();
+    setScenario('events-map');
+}
+
+function events_pick_cancel() {
+    events_pick_mode = false;
+    events_pick_code = "";
+    setScenario('events');
+    menu_new_event(true); // restore the parked drafts
+}
+
+function events_pick_confirm() {
+    events_pick_mode = false;
+    setScenario('events');
+    menu_new_event(true);
+}
+
+// DOM click on the SVG -> viewBox coordinates (the SVG is scaled to the
+// screen, the viewBox is a fixed 1000x1000)
+function events_map_click(ev) {
+    var r = ev.currentTarget.getBoundingClientRect();
+    events_map_pick_at((ev.clientX - r.left) * 1000 / r.width,
+                       (ev.clientY - r.top) * 1000 / r.height);
+}
+
+// Pure part (unit-tested): accept taps inside the geographic frame only,
+// encode the position as the event's plus code and show the marker.
+function events_map_pick_at(vx, vy) {
+    if (!events_pick_mode)
+        return;
+    var p = events_map_xy2geo(vx, vy);
+    var b = BASEL_BBOX;
+    if (p.lat < b.minLat || p.lat > b.maxLat || p.lng < b.minLng || p.lng > b.maxLng)
+        return;
+    events_pick_code = olc_encode(p.lat, p.lng);
+    events_render_map();
 }
 
 // Collect visible events; decode plus codes and split by whether they fall
@@ -65,6 +115,30 @@ function events_author_color(fid) {
     return (fid in tremola.contacts) ? tremola.contacts[fid].color : "#777777";
 }
 
+// Fixed Basel projection (equirectangular, equal ground scale on both axes)
+// in viewBox coordinates; shared by rendering and the tap-to-pick inverse.
+function events_map_geom() {
+    var W = 1000;
+    var b = BASEL_BBOX;
+    var cosMid = Math.cos(((b.minLat + b.maxLat) / 2) * Math.PI / 180);
+    var gw = (b.maxLng - b.minLng) * cosMid;   // ground width  (lat-deg equiv)
+    var gh = (b.maxLat - b.minLat);            // ground height
+    var scale = W / Math.max(gw, gh);
+    return {
+        "W": W, "b": b, "cosMid": cosMid, "gw": gw, "gh": gh, "scale": scale,
+        "offX": (W - gw * scale) / 2, "offY": (W - gh * scale) / 2
+    };
+}
+
+// inverse projection: viewBox x/y back to geographic coordinates
+function events_map_xy2geo(vx, vy) {
+    var g = events_map_geom();
+    return {
+        "lat": g.b.maxLat - (vy - g.offY) / g.scale,
+        "lng": g.b.minLng + (vx - g.offX) / (g.cosMid * g.scale)
+    };
+}
+
 function events_render_map() {
     var box = document.getElementById('div:events_map');
     if (box == null)
@@ -73,26 +147,33 @@ function events_render_map() {
     var inside = c.inside, i, p;
 
     var html = "<div class='event_toolbar'>";
-    html += "<button class='event_toolbar_btn' onclick='events_show_list();'>&#9776; List view</button>";
-    html += "<span class='event_toolbar_info'>" + inside.length + " in Basel";
-    if (c.outside.length > 0) html += ", " + c.outside.length + " outside";
-    if (c.unlocated > 0) html += ", " + c.unlocated + " no location";
-    html += "</span></div>";
+    if (events_pick_mode) {
+        // picking a location for a new event: instruction/result + actions
+        html += "<span class='event_toolbar_info'>" + (events_pick_code != ""
+            ? "&#x1F4CD; " + escapeHTML(events_pick_code)
+            : "Tap the map to place your event") + "</span>";
+        if (events_pick_code != "")
+            html += "<button class='event_toolbar_btn' onclick='events_pick_confirm();'>&#x2714; Use location</button>";
+        html += "<button class='event_toolbar_btn' onclick='events_pick_cancel();'>Cancel</button>";
+    } else {
+        html += "<button class='event_toolbar_btn' onclick='events_show_list();'>&#9776; List view</button>";
+        html += "<span class='event_toolbar_info'>" + inside.length + " in Basel";
+        if (c.outside.length > 0) html += ", " + c.outside.length + " outside";
+        if (c.unlocated > 0) html += ", " + c.unlocated + " no location";
+        html += "</span>";
+    }
+    html += "</div>";
 
-    // --- fixed Basel projection (equirectangular, equal ground scale) ---
-    var W = 1000;
-    var b = BASEL_BBOX;
-    var cosMid = Math.cos(((b.minLat + b.maxLat) / 2) * Math.PI / 180);
-    var gw = (b.maxLng - b.minLng) * cosMid;   // ground width  (lat-deg equiv)
-    var gh = (b.maxLat - b.minLat);            // ground height
-    var scale = W / Math.max(gw, gh);
-    var offX = (W - gw * scale) / 2;
-    var offY = (W - gh * scale) / 2;
+    var g = events_map_geom();
+    var W = g.W, b = g.b, cosMid = g.cosMid, gw = g.gw, gh = g.gh,
+        scale = g.scale, offX = g.offX, offY = g.offY;
     var px = function (lng) { return offX + (lng - b.minLng) * cosMid * scale; };
     var py = function (lat) { return offY + (b.maxLat - lat) * scale; };
 
     var svg = "<div class='events_map_wrap'>";
-    svg += "<svg viewBox='0 0 " + W + " " + W + "' class='events_map_svg' xmlns='http://www.w3.org/2000/svg'>";
+    svg += "<svg viewBox='0 0 " + W + " " + W + "' class='events_map_svg' " +
+        (events_pick_mode ? "onclick='events_map_click(event)' style='cursor: crosshair;' " : "") +
+        "xmlns='http://www.w3.org/2000/svg'>";
     svg += "<rect x='0' y='0' width='" + W + "' height='" + W + "' class='events_map_frame'/>";
     // land area of the basemap
     svg += "<rect x='" + offX + "' y='" + offY + "' width='" + (gw * scale) + "' height='" + (gh * scale) + "' class='basel_land'/>";
@@ -128,17 +209,39 @@ function events_render_map() {
     svg += "<line x1='" + (bx + barPx) + "' y1='" + (byy - 12) + "' x2='" + (bx + barPx) + "' y2='" + (byy + 12) + "' class='events_map_scale'/>";
     svg += "<text x='" + (bx + barPx / 2) + "' y='" + (byy - 20) + "' text-anchor='middle' class='events_map_scale_txt'>" + barLabel + "</text>";
 
-    // pins (numbering matches the legend, newest first)
+    // pins (numbering matches the legend, newest first); while picking they
+    // are inert context — their clicks must not open the detail overlay
     for (i = 0; i < inside.length; i++) {
         p = inside[i];
         var x = px(p.lng), y = py(p.lat);
-        svg += "<g class='events_map_pin' onclick=\"events_show_detail('" + p.ev.id + "')\">";
+        svg += events_pick_mode
+            ? "<g class='events_map_pin' style='pointer-events: none;' opacity='0.5'>"
+            : "<g class='events_map_pin' onclick=\"events_show_detail('" + p.ev.id + "')\">";
         svg += "<circle cx='" + x.toFixed(1) + "' cy='" + y.toFixed(1) + "' r='22' fill='" + events_author_color(p.ev.from) + "' stroke='white' stroke-width='4'/>";
         svg += "<text x='" + x.toFixed(1) + "' y='" + (y + 8).toFixed(1) + "' text-anchor='middle' class='events_map_pin_txt'>" + (i + 1) + "</text>";
         svg += "</g>";
     }
+
+    // crosshair marker for the picked position
+    if (events_pick_mode && events_pick_code != "") {
+        var pc = olc_decode(events_pick_code);
+        if (pc != null) {
+            var mx = px(pc.lng + 0.0000625), my = py(pc.lat + 0.0000625); // cell center
+            svg += "<g class='events_pick_marker' style='pointer-events: none;'>";
+            svg += "<circle cx='" + mx.toFixed(1) + "' cy='" + my.toFixed(1) + "' r='26'/>";
+            svg += "<line x1='" + (mx - 40).toFixed(1) + "' y1='" + my.toFixed(1) + "' x2='" + (mx + 40).toFixed(1) + "' y2='" + my.toFixed(1) + "'/>";
+            svg += "<line x1='" + mx.toFixed(1) + "' y1='" + (my - 40).toFixed(1) + "' x2='" + mx.toFixed(1) + "' y2='" + (my + 40).toFixed(1) + "'/>";
+            svg += "</g>";
+        }
+    }
     svg += "</svg></div>";
     html += svg;
+
+    if (events_pick_mode) {
+        // no legend while picking; keep the map clean
+        box.innerHTML = html;
+        return;
+    }
 
     if (inside.length === 0)
         html += "<div class='event_empty'>No events inside the Basel map yet.<br>Add one from Basel, or check the list view.</div>";

@@ -8,7 +8,13 @@
 // List-view presentation state. Not persisted on purpose: it is per-screen
 // UI state, not shared data — every device may sort/filter differently.
 var events_sort = "soonest"; // soonest | newest | oldest
-var events_filter = "all";   // all | upcoming | mine | located
+var events_filter = "all";   // all | upcoming | mine | located | going
+
+// New-event form state: a location picked on the map ("" = attach the
+// device's current position) and the drafts parked while picking.
+var events_pick_code = "";
+var events_draft_descr = "";
+var events_draft_time = "";
 
 function events_set_sort(v) { events_sort = v; events_load_list(); }
 function events_set_filter(v) { events_filter = v; events_load_list(); }
@@ -113,16 +119,42 @@ function events_load_list() {
     box.innerHTML = html;
 }
 
-// Invoked by the + FAB while in the events scenario (see plus_button()).
-function menu_new_event() {
+// Invoked by the + FAB while in the events scenario (see plus_button()),
+// and with keepDraft=true when returning from the map location picker.
+function menu_new_event(keepDraft) {
     closeOverlay();
+    if (!keepDraft) {
+        events_draft_descr = "";
+        events_draft_time = "";
+        events_pick_code = "";
+        events_pick_mode = false;
+    }
     var inp = document.getElementById('event_descr_input');
-    inp.value = "";
-    document.getElementById('event_time_input').value = "";
+    inp.value = events_draft_descr;
+    document.getElementById('event_time_input').value = events_draft_time;
+    events_render_loc_row();
     document.getElementById('overlay-bg').style.display = 'initial';
     document.getElementById('new_event-overlay').style.display = 'initial';
     overlayIsActive = true;
     inp.focus();
+}
+
+// The overlay's location line: picked-on-map plus code, or the default
+// (device position), with the switch between the two.
+function events_render_loc_row() {
+    var row = document.getElementById('event_loc_row');
+    if (row == null) return;
+    if (events_pick_code != "")
+        row.innerHTML = "&#x1F4CD; " + escapeHTML(events_pick_code) + " (picked on map) " +
+            "<button class='event_loc_btn' onclick='events_pick_clear()'>&#x2715; use current position</button>";
+    else
+        row.innerHTML = "Location: your current position (if enabled) " +
+            "<button class='event_loc_btn' onclick='events_pick_start()'>&#x1F5FA; Pick on map</button>";
+}
+
+function events_pick_clear() {
+    events_pick_code = "";
+    events_render_loc_row();
 }
 
 function event_create_from_input() {
@@ -140,7 +172,8 @@ function event_create_from_input() {
         if (!isNaN(t))
             starts = Math.floor(t / 1000);
     }
-    event_add(descr, starts);
+    event_add(descr, starts, events_pick_code);
+    events_pick_code = "";
     closeOverlay();
     launch_snackbar("Event shared");
 }

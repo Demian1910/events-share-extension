@@ -1,6 +1,7 @@
 // Tests for the Share Events mini-app logic: convergence under shuffled
 // delivery, tombstone authorization, RSVP last-writer-wins merging,
-// start-time indexing, sorting, filters.
+// start-time indexing, sorting, filters, plus-code encoding and the
+// map location picker.
 // The production files run UNMODIFIED; this file provides the globals they
 // reference and then drives them. Runs on macOS's bundled JavaScriptCore
 // (no Node.js needed) -- see run_events_tests.sh next to this file.
@@ -12,16 +13,23 @@ var myId = "@me.ed25519";
 var overlayIsActive = false;
 var backendCalls = [];
 function backend(s) { backendCalls.push(s); }
-function btoa(s) { return "b64"; } // only used inside event_add, value unchecked
+function btoa(s) { return "b64(" + s + ")"; } // tagged so calls are inspectable
 function unicodeStringToTypedArray(s) { return s; }
 function escapeHTML(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
 function id2b32(s) { return s.slice(0, 8); }
 function closeOverlay() {}
 function showGeoMenu() {}
+function launch_snackbar() {}
+// mimics the tremola_ui.js wiring for the two events scenarios
+function setScenario(s) {
+    curr_scenario = s;
+    if (s == "events") events_load_list();
+    else if (s == "events-map") events_render_map();
+}
 var elements = {};
 var document = {
     getElementById: function (id) {
-        if (!elements[id]) elements[id] = { innerHTML: "", style: {}, value: "" };
+        if (!elements[id]) elements[id] = { innerHTML: "", style: {}, value: "", focus: function () {} };
         return elements[id];
     }
 };
@@ -148,5 +156,58 @@ assert(backendCalls[backendCalls.length - 1] == "event:rsvp e2 1", "toggle publi
 events_set_sort("newest"); html = elements["lst:events"].innerHTML;
 assert(html.indexOf("value='newest' selected") >= 0, "sort selection re-applied after render");
 assert(pos("no schema field") < pos("soonest event"), "sort 'newest added' orders by creation");
+
+// 8) plus-code encoder: cell-accurate inverse of the decoder
+var rt_ok = true;
+for (var la = -89.9; la <= 89.9; la += 13.7) {
+    for (var lo = -179.9; lo <= 179.9; lo += 23.3) {
+        var sw = olc_decode(olc_encode(la, lo));
+        if (!(sw.lat <= la + 1e-6 && la < sw.lat + 0.000125 + 1e-6 &&
+              sw.lng <= lo + 1e-6 && lo < sw.lng + 0.000125 + 1e-6))
+            rt_ok = false;
+    }
+}
+assert(rt_ok, "olc_encode: every grid point decodes back to its own cell");
+var swb = olc_decode(IN_BASEL);
+assert(olc_encode(swb.lat, swb.lng) == IN_BASEL, "encoding a cell's SW corner returns the same code");
+assert(olc_encode(90, 0) != null && olc_decode(olc_encode(90, 0)) != null, "lat=90 pole edge encodes");
+
+// 9) projection: xy2geo inverts the forward projection used for pins
+var g = events_map_geom();
+var tlat = 47.5605, tlng = 7.5886; // Mittlere Bruecke
+var vx = g.offX + (tlng - g.b.minLng) * g.cosMid * g.scale;
+var vy = g.offY + (g.b.maxLat - tlat) * g.scale;
+var back = events_map_xy2geo(vx, vy);
+assert(Math.abs(back.lat - tlat) < 1e-9 && Math.abs(back.lng - tlng) < 1e-9,
+    "events_map_xy2geo inverts the pin projection");
+
+// 10) map location picker flow
+document.getElementById("event_descr_input").value = "picnic";
+document.getElementById("event_time_input").value = "2026-07-12T14:00";
+events_pick_start();
+assert(events_pick_mode === true && curr_scenario == "events-map", "pick_start switches to map in pick mode");
+html = elements["div:events_map"].innerHTML;
+assert(pos("Tap the map") >= 0, "pick mode shows the instruction");
+assert(pos("events_show_detail") < 0, "pins are inert while picking");
+events_map_pick_at(2, 500); // left of the geographic frame (offX > 0)
+assert(events_pick_code === "", "tap outside the frame is ignored");
+events_map_pick_at(500, 500);
+assert(events_pick_code !== "", "tap inside the frame picks a plus code");
+var pp = olc_decode(events_pick_code);
+assert(pp != null && pp.lat >= BASEL_BBOX.minLat && pp.lat <= BASEL_BBOX.maxLat &&
+    pp.lng >= BASEL_BBOX.minLng && pp.lng <= BASEL_BBOX.maxLng,
+    "picked code decodes to a position inside Basel");
+html = elements["div:events_map"].innerHTML;
+assert(pos("Use location") >= 0 && pos("events_pick_marker") >= 0, "marker and confirm button shown");
+var pickedCode = events_pick_code;
+events_pick_confirm();
+assert(curr_scenario == "events" && events_pick_mode === false, "confirm leaves pick mode");
+assert(elements["event_descr_input"].value == "picnic" &&
+    elements["event_time_input"].value == "2026-07-12T14:00", "form drafts restored after picking");
+assert(elements["event_loc_row"].innerHTML.indexOf(pickedCode) >= 0, "overlay shows the picked location");
+event_create_from_input();
+assert(backendCalls[backendCalls.length - 1].indexOf("b64(" + pickedCode + ")") == "event:add ".length,
+    "picked plus code published instead of the device position");
+assert(events_pick_code === "", "pick state cleared after publishing");
 
 print(fails === 0 ? "ALL TESTS PASSED" : fails + " FAILURE(S)");
