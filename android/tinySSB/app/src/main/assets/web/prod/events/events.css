@@ -43,6 +43,17 @@
     background-color: #e0b0b0;
 }
 
+.event_starts {
+    margin-top: 4px;
+    font-size: 0.9em;
+    font-weight: bold;
+}
+
+/* scheduled events whose start time already passed */
+.event_past {
+    opacity: 0.55;
+}
+
 .event_empty {
     text-align: center;
     margin-top: 2em;
@@ -70,6 +81,21 @@
 .event_toolbar_info {
     font-size: 0.8em;
     opacity: 0.7;
+}
+
+/* second toolbar row: sort + filter selectors */
+.event_filterbar {
+    margin-top: 0;
+    gap: 8px;
+}
+
+.event_select {
+    flex: 1;
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 6px;
+    background-color: var(--passiveCol, #d0d0d0);
+    font-size: 0.85em;
 }
 
 /* map view */

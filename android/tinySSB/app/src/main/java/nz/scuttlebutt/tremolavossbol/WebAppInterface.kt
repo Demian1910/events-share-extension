@@ -413,11 +413,13 @@ class WebAppInterface(val act: MainActivity, val webView: WebView) {
 
                 kanban(bid, prev , op, argsList)
             }
-            "event:add" -> { // event:add b64(pluscode)|null b64(description)
+            "event:add" -> { // event:add b64(pluscode)|null b64(description) starts|null
                 val pluscode = if (args[1] != "null")
                     Base64.decode(args[1], Base64.NO_WRAP).decodeToString() else ""
                 val descr = Base64.decode(args[2], Base64.NO_WRAP).decodeToString()
-                public_event_add(pluscode, descr)
+                // optional start time of the event (seconds since epoch, 0 = unscheduled)
+                val starts = if (args.size > 3 && args[3] != "null") args[3].toIntOrNull() ?: 0 else 0
+                public_event_add(pluscode, descr, starts)
                 return
             }
             "event:delete" -> { // event:delete eventId (base64 msg ref of the target event)
@@ -662,15 +664,18 @@ class WebAppInterface(val act: MainActivity, val webView: WebView) {
     }
 
     // Publish a georeferenced event on the public channel.
-    // Schema: [EVT, "add", pluscode, description, timestamp]
+    // Schema: [EVT, "add", pluscode, description, timestamp, starts]
+    // starts = optional start time of the event (seconds since epoch, 0 = not
+    // scheduled). Appended last so entries without it still parse (old format).
     // The message id (mid) assigned by the log becomes the event id, used by delete.
-    fun public_event_add(pluscode: String, description: String) {
+    fun public_event_add(pluscode: String, description: String, starts: Int = 0) {
         val lst = Bipf.mkList()
         Bipf.list_append(lst, TINYSSB_APP_EVENT)
         Bipf.list_append(lst, Bipf.mkString("add"))
         Bipf.list_append(lst, Bipf.mkString(pluscode))
         Bipf.list_append(lst, Bipf.mkString(description))
         Bipf.list_append(lst, Bipf.mkInt((System.currentTimeMillis() / 1000).toInt()))
+        Bipf.list_append(lst, Bipf.mkInt(starts))
         val body = Bipf.encode(lst)
         if (body != null)
             act.tinyNode.publish_public_content(body)

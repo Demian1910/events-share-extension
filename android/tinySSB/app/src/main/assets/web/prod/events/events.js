@@ -9,14 +9,17 @@
 // persist() like every other part of the tremola state object.
 //
 // Wire schema (e.public), produced by WebAppInterface.public_event_*:
-//   add: ["EVT", "add", pluscode, description, timestamp]
+//   add: ["EVT", "add", pluscode, description, timestamp, starts?]
 //   del: ["EVT", "del", targetEventId, timestamp]
+// starts is the optional scheduled start of the event (seconds since epoch);
+// it was appended to the schema later, so old entries simply lack it (-> 0).
 //
 // Index entry (tremola.events[id]):
-//   { id, from, pluscode, descr, when, deleted, pending_tombstone? }
-//   id   = message ref of the "add" entry (globally unique)
-//   from = author feed id (base64 SSB id)
-//   when = milliseconds since epoch
+//   { id, from, pluscode, descr, when, starts, deleted, pending_tombstone? }
+//   id     = message ref of the "add" entry (globally unique)
+//   from   = author feed id (base64 SSB id)
+//   when   = creation time, milliseconds since epoch
+//   starts = scheduled start, milliseconds since epoch (0 = not scheduled)
 
 "use strict";
 
@@ -57,6 +60,7 @@ function events_new_event(e) {
             "pluscode": pluscode,
             "descr": e.public[3] || "",
             "when": (e.public[4] || 0) * 1000,
+            "starts": (e.public[5] || 0) * 1000, // absent in old entries -> 0
             "deleted": deleted
         };
     } else if (op == "del") {
@@ -91,7 +95,8 @@ function events_refresh_view() {
 }
 
 // Publish a new event. Best-effort geolocation, mirroring prod/chat.js.
-function event_add(descr) {
+// startsSec: optional scheduled start (seconds since epoch, 0 = unscheduled).
+function event_add(descr, startsSec) {
     var pluscode = "";
     try {
         if (typeof Android != 'undefined' && Android.isGeoLocationEnabled() == "true")
@@ -102,7 +107,8 @@ function event_add(descr) {
     var loc = (pluscode && pluscode != "") ? btoa(pluscode) : "null";
     // unicodeStringToTypedArray: UTF-8 bytes so Kotlin's decodeToString()
     // round-trips non-ASCII text (same idiom as chat.js)
-    backend("event:add " + loc + " " + btoa(unicodeStringToTypedArray(descr)));
+    backend("event:add " + loc + " " + btoa(unicodeStringToTypedArray(descr))
+            + " " + (startsSec > 0 ? startsSec : "null"));
 }
 
 // Publish a tombstone for one of our own events.

@@ -174,7 +174,10 @@ function events_show_detail(eventId) {
     var who = (ev.from in tremola.contacts) ? tremola.contacts[ev.from].alias : id2b32(ev.from);
     var when = ev.when ? new Date(ev.when).toLocaleString() : "";
     var m = "<div class='event_descr' style='font-size: 1.15em;'>" + escapeHTML(ev.descr) + "</div>";
-    m += "<div class='event_meta'>" + escapeHTML(who) + " &middot; " + escapeHTML(when) + "</div>";
+    if (ev.starts > 0)
+        m += "<div class='event_starts'>&#x1F4C5; " + escapeHTML(events_fmt_starts(ev.starts)) +
+            (ev.starts <= Date.now() ? " (past)" : "") + "</div>";
+    m += "<div class='event_meta'>" + escapeHTML(who) + " &middot; added " + escapeHTML(when) + "</div>";
     m += "<div class='event_actions' style='margin-top: 14px;'>";
     if (ev.pluscode && ev.pluscode != "")
         m += "<button class='event_loc_btn' onclick='showGeoMenu(\"" + ev.pluscode + "\")'>&#x1F4CD; " + escapeHTML(ev.pluscode) + "</button>";

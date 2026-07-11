@@ -27,10 +27,10 @@ other device's feed  ──►  sendTinyEventToFrontend  ──►  b2f_new_even
 
 ## Wire format (BIPF list, app tag `EVT`)
 
-| op  | schema                                        |
-|-----|-----------------------------------------------|
-| add | `["EVT", "add", pluscode, description, tst]`  |
-| del | `["EVT", "del", eventId, tst]`                |
+| op  | schema                                                 |
+|-----|--------------------------------------------------------|
+| add | `["EVT", "add", pluscode, description, tst, starts?]`  |
+| del | `["EVT", "del", eventId, tst]`                         |
 
 - `pluscode`: Open Location Code of the event position (empty string when
   geolocation is disabled or no fix is available). From the
@@ -39,6 +39,15 @@ other device's feed  ──►  sendTinyEventToFrontend  ──►  b2f_new_even
 - `eventId`: the message id (`mid`) that the log assigned to the `add` entry —
   globally unique, no coordination needed.
 - `tst`: seconds since epoch, informational ordering only.
+- `starts`: optional scheduled start of the event (seconds since epoch,
+  0 = not scheduled). Appended to the schema after the first release, so old
+  entries simply lack the field and are indexed as unscheduled — schema
+  evolution by appending keeps old and new clients compatible in both
+  directions (old clients ignore the extra element).
+
+The list view sorts on this field ("soonest first": upcoming events by
+nearest start, then past/unscheduled ones by creation time) and can filter
+by upcoming / mine / with-location; past events are dimmed.
 
 ## State: a derived index, not a database
 
@@ -112,9 +121,16 @@ source can produce a fix — the event is then shared without a location.
 | `web/prod/events/events.css` | styling |
 | `web/prod/events/events.svg` | launcher icon |
 | `web/tremola.js` / `tremola_ui.js` / `tremola.html` / `prod/tools.js` | dispatch + scenario wiring + launcher |
+| `tests/events_test.js` + `run_events_tests.sh` | logic tests (run against the unmodified production JS) |
 
 ## Testing
 
+- **Logic tests** (no device, no Node.js): `android/tinySSB/tests/run_events_tests.sh`
+  loads the unmodified production JS into macOS's bundled JavaScriptCore and
+  asserts (a) replaying the same entries in several shuffled delivery orders
+  converges to the same visible state, (b) tombstones are honoured only from
+  the event's author, (c) old-format entries (without `starts`) still index,
+  (d) sorting and all filters produce the expected list.
 - **Two devices**: build and install the debug APK
   (`cd android/tinySSB && ./gradlew :app:assembleDebug`, then
   `adb install -r app/build/outputs/apk/debug/app-debug.apk` on each phone).
