@@ -64,6 +64,40 @@ class WebAppInterface(val act: MainActivity, val webView: WebView) {
                checkSelfPermission(act, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
     }
 
+    // Best usable CACHED fix, chosen by accuracy (a GPS fix up to 10 min old, a
+    // non-GPS fix only if < 90 s old, both only if accuracy <= 200 m). Instant
+    // (getLastKnownLocation does not block) and independent of Play Services.
+    private fun bestCachedFix(): Location? {
+        if (!hasLocationPermission())
+            return null
+        val lm = act.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val now = System.currentTimeMillis()
+        var best: Location? = null
+        try {
+            for (p in lm.getProviders(true)) {
+                val loc = try { lm.getLastKnownLocation(p) } catch (e: SecurityException) { null } ?: continue
+                val isGps = loc.provider == LocationManager.GPS_PROVIDER
+                val maxAge = if (isGps) 10 * 60 * 1000L else 90 * 1000L
+                if (now - loc.time > maxAge) continue
+                if (loc.hasAccuracy() && loc.accuracy > 200f) continue
+                if (best == null || (loc.hasAccuracy() && (!best!!.hasAccuracy() || loc.accuracy < best!!.accuracy)))
+                    best = loc
+            }
+        } catch (e: Exception) { /* ignore */ }
+        return best
+    }
+
+    /**
+     * Instant, non-blocking location: a PlusCode from the best cached fix, or "" if
+     * none. Used where blocking the UI is unacceptable (e.g. sending a chat message),
+     * so the send is never delayed by a fresh GPS lock.
+     */
+    @JavascriptInterface
+    fun getCachedLocationAsPlusCode(): String {
+        val loc = bestCachedFix() ?: return ""
+        return PlusCodesUtils.encode(loc.latitude, loc.longitude)
+    }
+
     /**
      * Returns the current position as a PlusCode, or "" if none could be obtained
      * (the caller then shares without a location).
@@ -94,25 +128,12 @@ class WebAppInterface(val act: MainActivity, val webView: WebView) {
             return ""
         }
 
-        val lm = act.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val now = System.currentTimeMillis()
-
-        // 1) Best usable cached fix, chosen by accuracy (a GPS fix up to 10 min old,
-        //    a non-GPS fix only if < 90 s old, both only if accuracy <= 200 m).
-        var best: Location? = null
-        try {
-            for (p in lm.getProviders(true)) {
-                val loc = try { lm.getLastKnownLocation(p) } catch (e: SecurityException) { null } ?: continue
-                val isGps = loc.provider == LocationManager.GPS_PROVIDER
-                val maxAge = if (isGps) 10 * 60 * 1000L else 90 * 1000L
-                if (now - loc.time > maxAge) continue
-                if (loc.hasAccuracy() && loc.accuracy > 200f) continue
-                if (best == null || (loc.hasAccuracy() && (!best!!.hasAccuracy() || loc.accuracy < best!!.accuracy)))
-                    best = loc
-            }
-        } catch (e: Exception) { /* fall through */ }
+        // 1) instant cached fix (accuracy-filtered) — see bestCachedFix()
+        val best = bestCachedFix()
         if (best != null)
-            return PlusCodesUtils.encode(best!!.latitude, best!!.longitude)
+            return PlusCodesUtils.encode(best.latitude, best.longitude)
+
+        val lm = act.getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
         // 2) No cached fix: listen on GPS and NETWORK together, keep the most
         //    accurate fix, run up to 18 s and stop early once accuracy is good.

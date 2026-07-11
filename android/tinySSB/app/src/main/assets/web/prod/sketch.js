@@ -491,7 +491,7 @@ async function chat_sendDrawing() {
 
         //add geolocation to message if enabled.
         if (Android.isGeoLocationEnabled() == "true"){ //ony add if enabled
-            var plusCode = Android.getCurrentLocationAsPlusCode();
+            var plusCode = Android.getCachedLocationAsPlusCode(); // cached-only: never blocks the send
             if (plusCode != null && plusCode.length > 0) //check if we actually received a location
                 img = "pfx:loc/plus," + plusCode + "|" + img;
         }
