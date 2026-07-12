@@ -69,7 +69,7 @@ function new_text_post(s) {
     }
     var draft = ''
     if (Android.isGeoLocationEnabled() == "true") {
-        var plusCode = Android.getCurrentLocationAsPlusCode();
+        var plusCode = Android.getCachedLocationAsPlusCode(); // cached-only: never blocks the send
         if (plusCode != null && plusCode.length > 0) //check if we actually received a location
             draft += "pfx:loc/plus," + plusCode + "|";
     }
@@ -100,7 +100,7 @@ function new_text_post(s) {
 function new_voice_post(voice_b64) {
     var draft = ''
     if (Android.isGeoLocationEnabled() == "true") {
-        var plusCode = Android.getCurrentLocationAsPlusCode();
+        var plusCode = Android.getCachedLocationAsPlusCode(); // cached-only: never blocks the send
         if (plusCode != null && plusCode.length > 0) //check if we actually received a location
             draft += "pfx:loc/plus," + plusCode + "|";
     }
