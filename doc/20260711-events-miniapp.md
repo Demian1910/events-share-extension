@@ -18,7 +18,7 @@ frontiers converge and events flow with them.
 UI (events_ui.js / events_map.js)
    │ backend("event:add …")                 WebView bridge (WebAppInterface)
    ▼
-public_event_add/delete  ──►  publish_public_content  ──►  own append-only feed
+public_event_add/delete/rsvp ──► publish_public_content ──► own append-only feed
                                                                  │  GOset replication
 other device's feed  ──►  sendTinyEventToFrontend  ──►  b2f_new_event
                                                                  │
@@ -48,13 +48,13 @@ other device's feed  ──►  sendTinyEventToFrontend  ──►  b2f_new_even
 
 The list view sorts on this field ("soonest first": upcoming events by
 nearest start, then past/unscheduled ones by creation time) and can filter
-by upcoming / mine / with-location; past events are dimmed.
+by upcoming / mine / with-location / I'm-going; past events are dimmed.
 
 ## State: a derived index, not a database
 
-`tremola.events[id] = {id, from, pluscode, descr, when, deleted}` lives in the
-frontend, persisted with the rest of the `tremola` object and rebuilt by
-replaying the log (`restream`). We deliberately did **not** extend a
+`tremola.events[id] = {id, from, pluscode, descr, when, starts, deleted, rsvps}`
+lives in the frontend, persisted with the rest of the `tremola` object and
+rebuilt by replaying the log (`restream`). We deliberately did **not** extend a
 server-side store: the append-only feeds *are* the storage and the source of
 truth; everything else is a materialized view. This keeps the app correct
 under re-delivery (indexing is idempotent, keyed by `mid`) and free of
@@ -150,11 +150,11 @@ Grossbasel / Kleinbasel districts, a north arrow and a 1/2/5-stepped scale
 bar. Events are projected with an equirectangular projection (equal ground
 scale on both axes, cos-latitude corrected). Plus codes are decoded to
 lat/long by `prod/events/pluscodes.js`, a JS port of `PlusCodesUtils.decode`
-(verified with 20'000 round-trips against an encoder ported from the same
-source). Events inside the Basel frame get author-colored numbered pins that
-match a tappable legend; events outside the frame or without a location stay
-reachable in the legend and list. Pins and legend rows open a detail overlay
-shared with the list view.
+(the logic tests round-trip a global grid of positions against an encoder
+ported from the same source). Events inside the Basel frame get author-colored
+numbered pins that match a tappable legend; events outside the frame or
+without a location stay reachable in the legend and list. Pins and legend rows
+open a detail overlay shared with the list view.
 
 The map doubles as a **location picker**: from the new-event form, "Pick on
 map" switches the map into pick mode — a tap is run through the inverse of
@@ -186,15 +186,16 @@ the position can be chosen manually on the map (see above).
 | file | role |
 |------|------|
 | `utils/Constants.kt` | `TINYSSB_APP_EVENT` tag |
-| `WebAppInterface.kt` | `event:add` / `event:delete` handlers, publishing, geolocation |
+| `WebAppInterface.kt` | `event:add` / `event:delete` / `event:rsvp` handlers, publishing, geolocation |
 | `MainActivity.kt` | requests the location permission at startup |
-| `web/prod/events/events.js` | EVT dispatch, index, add/delete logic |
+| `web/prod/events/events.js` | EVT dispatch, index, add/delete/rsvp logic |
 | `web/prod/events/events_ui.js` | list view, add overlay, delete confirm |
-| `web/prod/events/events_map.js` | Basel map view, detail overlay |
+| `web/prod/events/events_map.js` | Basel map view, location picker, detail overlay |
 | `web/prod/events/pluscodes.js` | OLC decoder (JS port) + matching encoder |
 | `web/prod/events/events.css` | styling |
 | `web/prod/events/events.svg` | launcher icon |
 | `web/tremola.js` / `tremola_ui.js` / `tremola.html` / `prod/tools.js` | dispatch + scenario wiring + launcher |
+| `web/prod/chat.js` / `sketch.js` | chat/sketch sends switched to the non-blocking cached-only location |
 | `tests/events_test.js` + `run_events_tests.sh` | logic tests (run against the unmodified production JS) |
 
 ## Testing
